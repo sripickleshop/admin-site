@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Setup Admin User</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+
+<body class="bg-gray-100 min-h-screen flex items-center justify-center p-4">
+
+    <div class="bg-white p-8 rounded-lg shadow-xl max-w-2xl w-full">
+        <h1 class="text-2xl font-bold mb-4 text-gray-800">Admin User Setup</h1>
+
+        <div class="space-y-4">
+            <div class="p-4 bg-blue-50 border border-blue-200 rounded text-sm text-blue-800">
+                This tool will create the Auth User for <strong>iamajoyag@gmail.com</strong> and generate the SQL to
+                grant Admin permissions.
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 uppercase">Email</label>
+                    <input type="text" value="iamajoyag@gmail.com" readonly
+                        class="w-full font-mono bg-gray-50 border p-2 rounded">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 uppercase">Password</label>
+                    <input type="text" value="PicklePassword" readonly
+                        class="w-full font-mono bg-gray-50 border p-2 rounded">
+                </div>
+            </div>
+
+            <button id="create-btn" onclick="createAdmin()"
+                class="w-full bg-green-600 text-white font-bold py-3 rounded hover:bg-green-700 transition">
+                1. Create User Account
+            </button>
+
+            <div id="result-section" class="hidden border-t pt-4 mt-4">
+                <p class="text-green-700 font-bold mb-2">✅ User Account Ready!</p>
+                <p class="text-sm text-gray-600 mb-2">User ID: <span id="user-id"
+                        class="font-mono bg-yellow-100 px-1">...</span></p>
+
+                <p class="text-gray-800 font-bold mb-2">2. Run this SQL in Supabase Dashboard:</p>
+                <textarea id="sql-box" class="w-full h-48 font-mono text-xs bg-gray-800 text-green-400 p-4 rounded mb-2"
+                    readonly></textarea>
+                <button onclick="copySql()"
+                    class="bg-gray-700 text-white px-4 py-2 rounded text-sm hover:bg-gray-600">Copy SQL</button>
+            </div>
+
+            <div id="error-box" class="hidden bg-red-100 text-red-700 p-4 rounded border border-red-200 mt-4"></div>
+        </div>
+    </div>
+
+    <script>
+        // CLIENT CONFIG (Public Safe)
+        const SUPABASE_URL = 'https://msgsyauarenjcxajjnmq.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1zZ3N5YXVhcmVuamN4YWpqbm1xIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc3MjI0NTEsImV4cCI6MjA4MzI5ODQ1MX0.a_v7FEXYnlI2MkRbX3hwrK6q8v-CCma25CGRUgdm-6o';
+        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        async function createAdmin() {
+            const btn = document.getElementById('create-btn');
+            const errBox = document.getElementById('error-box');
+            const resSection = document.getElementById('result-section');
+
+            btn.disabled = true;
+            btn.innerText = "Processing...";
+            errBox.classList.add('hidden');
+
+            try {
+                // 1. Sign Up
+                const email = 'iamajoyag@gmail.com';
+                const password = 'PicklePassword';
+
+                let { data, error } = await supabase.auth.signUp({
+                    email, password
+                });
+
+                if (error) {
+                    // Start session if already exists?
+                    // "User already registered" is a common error 400
+                    if (error.message.includes("already registered")) {
+                        console.log("User exists, trying to sign in to get ID...");
+                        const signIn = await supabase.auth.signInWithPassword({ email, password });
+                        if (signIn.error) throw signIn.error;
+                        data = signIn.data;
+                    } else {
+                        throw error;
+                    }
+                }
+
+                if (!data || !data.user) throw new Error("No user data returned.");
+
+                const userId = data.user.id;
+                document.getElementById('user-id').innerText = userId;
+
+                // 2. Generate SQL
+                const sql = `-- INSERT DEVELOPER PROFILE
+INSERT INTO admin_profiles (id, email, role, full_name, is_active, permissions)
+VALUES (
+  '${userId}', 
+  '${email}', 
+  'developer', 
+  'Master Developer', 
+  true, 
+  '{"products": true, "orders": true, "customers": true, "settings": true, "team": true}'::jsonb
+)
+ON CONFLICT (id) DO UPDATE 
+SET 
+  role = 'developer',
+  is_active = true,
+  permissions = '{"products": true, "orders": true, "customers": true, "settings": true, "team": true}'::jsonb;`;
+
+                document.getElementById('sql-box').value = sql;
+
+                btn.classList.add('hidden');
+                resSection.classList.remove('hidden');
+
+            } catch (err) {
+                console.error(err);
+                btn.disabled = false;
+                btn.innerText = "Retry";
+                errBox.innerText = err.message;
+                errBox.classList.remove('hidden');
+            }
+        }
+
+        function copySql() {
+            const copyText = document.getElementById("sql-box");
+            copyText.select();
+            copyText.setSelectionRange(0, 99999);
+            navigator.clipboard.writeText(copyText.value);
+            alert("SQL Copied! Now run it in Supabase SQL Editor.");
+        }
+    </script>
+</body>
+
+</html>
